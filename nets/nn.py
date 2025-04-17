@@ -32,11 +32,13 @@ def fuse_conv(conv, norm):
 
     return fused_conv
 
-
+# Convolutional block
 class Conv(torch.nn.Module):
+    
+    # parameters: input channels, output channels, kernel size, stride, padding, dilation, groups
     def __init__(self, in_ch, out_ch, k=1, s=1, p=None, d=1, g=1):
         super().__init__()
-        self.conv = torch.nn.Conv2d(in_ch, out_ch, k, s, pad(k, p, d), d, g, False)
+        self.conv = torch.nn.Conv2d(in_ch, out_ch, k, s, pad(k, p, d), d, g, False) # False to disable bias (redundant with BatchNorm)
         self.norm = torch.nn.BatchNorm2d(out_ch, 0.001, 0.03)
         self.relu = torch.nn.SiLU(inplace=True)
 
