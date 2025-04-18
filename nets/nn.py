@@ -4,12 +4,12 @@ import torch
 
 from utils.util import make_anchors
 
-
+# function to calculate appropriate padding
 def pad(k, p=None, d=1):
-    if d > 1:
-        k = d * (k - 1) + 1
-    if p is None:
-        p = k // 2
+    if d > 1:   # if dilatation involved
+        k = d * (k - 1) + 1 # adjust the effective kernel size, accounting for extra spacing
+    if p is None:   # if no padding provided
+        p = k // 2  # half-padding
     return p
 
 
@@ -39,39 +39,54 @@ class Conv(torch.nn.Module):
     def __init__(self, in_ch, out_ch, k=1, s=1, p=None, d=1, g=1):
         super().__init__()
         self.conv = torch.nn.Conv2d(in_ch, out_ch, k, s, pad(k, p, d), d, g, False) # False to disable bias (redundant with BatchNorm)
-        self.norm = torch.nn.BatchNorm2d(out_ch, 0.001, 0.03)
-        self.relu = torch.nn.SiLU(inplace=True)
+        self.norm = torch.nn.BatchNorm2d(out_ch, 0.001, 0.03)   # common scale and shift for YOLO models
+        self.relu = torch.nn.SiLU(inplace=True) # Sigmoid Linear Unit
 
+    # Conv2D -> BatchNorm2D -> SiLU
     def forward(self, x):
         return self.relu(self.norm(self.conv(x)))
 
+    # optimization trick to faster the inference phase, 
+    # we can mathematically combine BatchNorm parameters into Conv2d weights and biases
     def fuse_forward(self, x):
-        return self.relu(self.conv(x))
+        return self.relu(self.conv(x))  # BatchNorm step is skipped
 
 
+# Bottleneck block
 class Residual(torch.nn.Module):
+    # parameters: input channels, add indicates if the residual block adds a skip connection
+    # the block is channel-preserving
     def __init__(self, ch, add=True):
         super().__init__()
         self.add_m = add
-        self.res_m = torch.nn.Sequential(Conv(ch, ch, 3),
-                                         Conv(ch, ch, 3))
+        self.res_m = torch.nn.Sequential(Conv(ch, ch, 3),   # here the bottleneck
+                                         Conv(ch, ch, 3))   # two convolution with kernel size 3
 
     def forward(self, x):
         return self.res_m(x) + x if self.add_m else self.res_m(x)
 
 
+# C2f block (actually named C2f cause Cross Stage Partial is in v4, v5)
 class CSP(torch.nn.Module):
+    # parameters: input channels, output channels, number of residual blocks,
+    # add indicates if each residual block adds a skip connection
     def __init__(self, in_ch, out_ch, n=1, add=True):
         super().__init__()
-        self.conv1 = Conv(in_ch, out_ch // 2)
-        self.conv2 = Conv(in_ch, out_ch // 2)
-        self.conv3 = Conv((2 + n) * out_ch // 2, out_ch)
-        self.res_m = torch.nn.ModuleList(Residual(out_ch // 2, add) for _ in range(n))
+        
+        # split the input channels into two branches, each with half the output channels
+        self.conv1 = Conv(in_ch, out_ch // 2)   # first branch split, will not be transformed (a skip connection), will be concatenated later
+        self.conv2 = Conv(in_ch, out_ch // 2)   # second branch split, will pass through n residual blocks
+        # note: this performs two separate convs, not one followed by split (as in C2f block architecture)
 
+        self.res_m = torch.nn.ModuleList(Residual(out_ch // 2, add) for _ in range(n))  # sequence of n residual blocks
+        
+        # final convolution to combine the outputs of the two branches and the residual blocks
+        self.conv3 = Conv((2 + n) * out_ch // 2, out_ch)  # 2 branches + n residual blocks
+        
     def forward(self, x):
-        y = [self.conv1(x), self.conv2(x)]
-        y.extend(m(y[-1]) for m in self.res_m)
-        return self.conv3(torch.cat(y, dim=1))
+        y = [self.conv1(x), self.conv2(x)]  # first branch split and second branch split
+        y.extend(m(y[-1]) for m in self.res_m)  # concatenate the outputs of the residual blocks to the list y
+        return self.conv3(torch.cat(y, dim=1))  # final convolution
 
 
 class SPP(torch.nn.Module):
