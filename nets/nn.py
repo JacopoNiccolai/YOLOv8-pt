@@ -61,6 +61,7 @@ class Residual(torch.nn.Module):
         self.add_m = add
         self.res_m = torch.nn.Sequential(Conv(ch, ch, 3),   # here the bottleneck
                                          Conv(ch, ch, 3))   # two convolution with kernel size 3
+        # note: this does not change the channel dimension in the bottleneck (it could be 0.5 * ch)
 
     def forward(self, x):
         return self.res_m(x) + x if self.add_m else self.res_m(x)
@@ -89,18 +90,22 @@ class CSP(torch.nn.Module):
         return self.conv3(torch.cat(y, dim=1))  # final convolution
 
 
+# Spatial Pyramid Pooling block (this is actually a SPPF block)
 class SPP(torch.nn.Module):
+    # parameters: input channels, output channels, kernel size
     def __init__(self, in_ch, out_ch, k=5):
         super().__init__()
-        self.conv1 = Conv(in_ch, in_ch // 2)
+        self.conv1 = Conv(in_ch, in_ch // 2)    # reduce the number of channels by half, to reduce computation before pooling
+        self.res_m = torch.nn.MaxPool2d(k, 1, k // 2)   # max pooling with kernel size k and stride 1, padding k // 2
         self.conv2 = Conv(in_ch * 2, out_ch)
-        self.res_m = torch.nn.MaxPool2d(k, 1, k // 2)
+        # note: in_ch // 2 from conv1 plus 3 more from the pooling steps, so 4 × (in_ch // 2) = in_ch * 2
 
     def forward(self, x):
-        x = self.conv1(x)
-        y1 = self.res_m(x)
-        y2 = self.res_m(y1)
-        return self.conv2(torch.cat([x, y1, y2, self.res_m(y2)], 1))
+        x = self.conv1(x)   # reduce the number of channels by half
+        y1 = self.res_m(x)  # first pooling step
+        y2 = self.res_m(y1) # second pooling step
+        # the third polling step: y3 = self.res_m(y2) is done here below       
+        return self.conv2(torch.cat([x, y1, y2, self.res_m(y2)], 1))    # concatenate the outputs of the pooling steps and the original input, and pass through conv2
 
 
 class DarkNet(torch.nn.Module):
@@ -168,43 +173,56 @@ class DFL(torch.nn.Module):
         return self.conv(x.softmax(1)).view(b, 4, a)
 
 
+# Detect block (multi-scale detection head)
+# outputs x, y, w, h, class_scores
 class Head(torch.nn.Module):
+    # placeholders to be set during inference with make_anchors
     anchors = torch.empty(0)
     strides = torch.empty(0)
 
+    # parameters: number of classes, filters (number of channels in the last conv layer)
     def __init__(self, nc=80, filters=()):
         super().__init__()
-        self.ch = 16  # DFL channels
-        self.nc = nc  # number of classes
+        self.ch = 16  # DFL channels, each coordinate (x, y, w, h) is predicted as a distribution over 16 bins
+        self.nc = nc  # number of classes, 80 for COCO
         self.nl = len(filters)  # number of detection layers
-        self.no = nc + self.ch * 4  # number of outputs per anchor
+        self.no = nc + self.ch * 4  # number of outputs per anchor = nc + ch * 4 (bounding box encoded by DFL)
         self.stride = torch.zeros(self.nl)  # strides computed during build
 
-        c1 = max(filters[0], self.nc)
-        c2 = max((filters[0] // 4, self.ch * 4))
+        c1 = max(filters[0], self.nc)   # intermediate channel size used in the classification branch
+        c2 = max((filters[0] // 4, self.ch * 4))    # intermediate channel size used in the bounding box regression branch
 
         self.dfl = DFL(self.ch)
+        # classification branch: Conv -> Conv -> Conv2D
         self.cls = torch.nn.ModuleList(torch.nn.Sequential(Conv(x, c1, 3),
                                                            Conv(c1, c1, 3),
                                                            torch.nn.Conv2d(c1, self.nc, 1)) for x in filters)
+        #  bounding box regression branch: Conv -> Conv -> Conv2D
         self.box = torch.nn.ModuleList(torch.nn.Sequential(Conv(x, c2, 3),
                                                            Conv(c2, c2, 3),
                                                            torch.nn.Conv2d(c2, 4 * self.ch, 1)) for x in filters)
+        # note: 4 * self.ch because we have 4 coordinates (x, y, w, h) for each anchor box
 
     def forward(self, x):
         for i in range(self.nl):
             x[i] = torch.cat((self.box[i](x[i]), self.cls[i](x[i])), 1)
+            
+        # training mode
         if self.training:
             return x
-        self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, self.stride, 0.5))
+        
+        # inference mode
+        self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, self.stride, 0.5)) # computer anchors and strides
 
-        x = torch.cat([i.view(x[0].shape[0], self.no, -1) for i in x], 2)
-        box, cls = x.split((self.ch * 4, self.nc), 1)
-        a, b = torch.split(self.dfl(box), 2, 1)
+        x = torch.cat([i.view(x[0].shape[0], self.no, -1) for i in x], 2)   # reshape per-feature outputs into unified format
+        box, cls = x.split((self.ch * 4, self.nc), 1)   # split into box and class logits
+        
+        # DFL decoding
+        a, b = torch.split(self.dfl(box), 2, 1) # left/right for center-based box
         a = self.anchors.unsqueeze(0) - a
         b = self.anchors.unsqueeze(0) + b
         box = torch.cat(((a + b) / 2, b - a), 1)
-        return torch.cat((box * self.strides, cls.sigmoid()), 1)
+        return torch.cat((box * self.strides, cls.sigmoid()), 1)    # final bounding box and class confidence (after sigmoid)
 
     def initialize_biases(self):
         # Initialize biases
@@ -241,6 +259,7 @@ class YOLO(torch.nn.Module):
                 delattr(m, 'norm')
         return self
 
+# YOLO v8 architecture variants
 
 def yolo_v8_n(num_classes: int = 80):
     depth = [1, 2, 2]
