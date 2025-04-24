@@ -14,7 +14,7 @@ def inference(args, params):
     
     filenames = []
     
-    for i in range(1, 2):
+    for i in range(0, 10):
         filenames.append('data/images/' + str(i) + '.jpg')
 
     dataset = Dataset(filenames, args.input_size, params, False)
@@ -33,8 +33,13 @@ def inference(args, params):
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    p_bar = tqdm.tqdm(loader, desc='Running Inference')
+    
+    img_count = 0
+
     # Inference loop
-    for i, (samples, targets, paths) in enumerate(tqdm.tqdm(loader, desc='Running Inference')):
+    # for i, samples, targets) in enumerate(tqdm.tqdm(loader, desc='Running Inference')):
+    for samples, targets, shapes in p_bar:
         samples = samples.to(device).float() / 255.0
 
         with torch.no_grad():
@@ -42,12 +47,15 @@ def inference(args, params):
 
         # outputs = util.non_max_suppression(outputs, 0.001, 0.65)
         outputs = util.non_max_suppression(outputs, 0.5, 0.65)
-
+        
         for j, pred in enumerate(outputs):
+            
             # Get original image path
-            image_path = filenames[j]  # assumes loader returns image paths
-            filename = filenames[j].split('/')[-1].split('.')[0]  # get filename without extension
+            image_path = filenames[img_count]  # assumes loader returns image paths
+            filename = filenames[img_count].split('/')[-1].split('.')[0]  # get filename without extension
 
+            img_count += 1
+            
             # Load original image for drawing
             original_img = cv2.imread(image_path)
             h_orig, w_orig = original_img.shape[:2]
