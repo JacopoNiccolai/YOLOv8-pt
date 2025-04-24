@@ -18,7 +18,7 @@ def inference(args, params):
         filenames.append('data/images/' + str(i) + '.jpg')
 
     dataset = Dataset(filenames, args.input_size, params, False)
-    loader = data.DataLoader(dataset, 1, False, collate_fn=Dataset.collate_fn)  
+    loader = data.DataLoader(dataset, 5, False, collate_fn=Dataset.collate_fn)  
     
     model = torch.load('./weights/best.pt', map_location='cpu')['model'].float() 
     
@@ -59,21 +59,38 @@ def inference(args, params):
             # Load original image for drawing
             original_img = cv2.imread(image_path)
             h_orig, w_orig = original_img.shape[:2]
-
+            
             # Save predictions to TXT
             txt_path = os.path.join(txt_dir, f"{filename}.txt")
             with open(txt_path, 'w') as f:
                 if pred is not None and len(pred):
+
                     for *xyxy, conf, cls in pred:
                         line = f"{int(cls)} {conf:.4f} {' '.join([f'{x:.2f}' for x in xyxy])}\n"
                         f.write(line)
-
+                        
+                        # scale coordinates to original image size
+                        xyxy = [int(x) for x in xyxy]
+                        xyxy[0] = int(xyxy[0] * w_orig / args.input_size)
+                        xyxy[1] = int(xyxy[1] * h_orig / args.input_size)
+                        xyxy[2] = int(xyxy[2] * w_orig / args.input_size)
+                        xyxy[3] = int(xyxy[3] * h_orig / args.input_size)
+                        
                         # Draw boxes on image
-                        x1, y1, x2, y2 = map(int, xyxy)
-                        label = f"{int(cls)} {conf:.2f}"
-                        cv2.rectangle(original_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        cv2.putText(original_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.5, (0, 255, 0), 1, cv2.LINE_AA)
+                        x1, y1, x2, y2 = [int(x) for x in xyxy]
+                        label = f"{int(cls)}: {conf:.2f}"
+                        color = (0, 255, 0)
+                        cv2.rectangle(original_img, (x1, y1), (x2, y2), color, 2)
+                        cv2.putText(original_img, label, (x1, y1 - 10), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                        
+                                               
+                        # Draw boxes on image
+                        # x1, y1, x2, y2 = map(int, xyxy)
+                        # label = f"{int(cls)} {conf:.2f}"
+                        # cv2.rectangle(original_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        # cv2.putText(original_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
+                        #             0.5, (0, 255, 0), 1, cv2.LINE_AA)
 
             # Save annotated image
             img_save_path = os.path.join(img_dir, f"{filename}.jpg")
