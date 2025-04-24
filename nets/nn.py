@@ -108,11 +108,12 @@ class SPP(torch.nn.Module):
         return self.conv2(torch.cat([x, y1, y2, self.res_m(y2)], 1))    # concatenate the outputs of the pooling steps and the original input, and pass through conv2
 
 
+# Backbone network (DarkNet backbone)
 class DarkNet(torch.nn.Module):
     def __init__(self, width, depth):
         super().__init__()
-        p1 = [Conv(width[0], width[1], 3, 2)]
-        p2 = [Conv(width[1], width[2], 3, 2),
+        p1 = [Conv(width[0], width[1], 3, 2)]       # first conv layer, downsample by 2 (stride=2)
+        p2 = [Conv(width[1], width[2], 3, 2),       # second conv layer, downsample by 2 (stride=2)
               CSP(width[2], width[2], depth[0])]
         p3 = [Conv(width[2], width[3], 3, 2),
               CSP(width[3], width[3], depth[1])]
@@ -122,7 +123,7 @@ class DarkNet(torch.nn.Module):
               CSP(width[5], width[5], depth[0]),
               SPP(width[5], width[5])]
 
-        self.p1 = torch.nn.Sequential(*p1)
+        self.p1 = torch.nn.Sequential(*p1)  # * unpacks the list into arguments
         self.p2 = torch.nn.Sequential(*p2)
         self.p3 = torch.nn.Sequential(*p3)
         self.p4 = torch.nn.Sequential(*p4)
@@ -137,6 +138,7 @@ class DarkNet(torch.nn.Module):
         return p3, p4, p5
 
 
+# Feature Pyramid Network (FPN) block - Neck
 class DarkFPN(torch.nn.Module):
     def __init__(self, width, depth):
         super().__init__()
@@ -157,6 +159,7 @@ class DarkFPN(torch.nn.Module):
         return h2, h4, h6
 
 
+# Distribution Focal Loss (DFL) module
 class DFL(torch.nn.Module):
     # Integral module of Distribution Focal Loss (DFL)
     # Generalized Focal Loss https://ieeexplore.ieee.org/document/9792391
@@ -237,8 +240,8 @@ class Head(torch.nn.Module):
 class YOLO(torch.nn.Module):
     def __init__(self, width, depth, num_classes):
         super().__init__()
-        self.net = DarkNet(width, depth)
-        self.fpn = DarkFPN(width, depth)
+        self.net = DarkNet(width, depth)    # backbone network
+        self.fpn = DarkFPN(width, depth)    # feature pyramid network (neck)
 
         img_dummy = torch.zeros(1, 3, 256, 256)
         self.head = Head(num_classes, (width[3], width[4], width[5]))
@@ -258,6 +261,7 @@ class YOLO(torch.nn.Module):
                 m.forward = m.fuse_forward
                 delattr(m, 'norm')
         return self
+
 
 # YOLO v8 architecture variants
 

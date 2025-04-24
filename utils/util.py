@@ -9,17 +9,19 @@ import torchvision
 from torch.nn.functional import cross_entropy, one_hot
 
 
+# ensures reproducibility in experiments by setting fixed random seeds across different libraries
 def setup_seed():
     """
     Setup random seed.
     """
-    random.seed(0)
-    numpy.random.seed(0)
-    torch.manual_seed(0)
+    random.seed(0)  # Python random module
+    numpy.random.seed(0)    # Numpy random module
+    torch.manual_seed(0)    # PyTorch CPU or CUDA if available
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
 
+# configures the multi-processing environment to improve performance, stability, and resource management during training
 def setup_multi_processes():
     """
     Setup multi-processing environment variables.

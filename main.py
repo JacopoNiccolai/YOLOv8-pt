@@ -203,7 +203,7 @@ def test(args, params, model=None):
         model = torch.load('./weights/best.pt', map_location='cuda')['model'].float()
 
     model.half()
-    model.eval()
+    model.eval()    
 
     # Configure
     iou_v = torch.linspace(0.5, 0.95, 10).cuda()  # iou vector for mAP@0.5:0.95
@@ -284,6 +284,8 @@ def test(args, params, model=None):
 
 
 def main():
+    
+    # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-size', default=640, type=int)
     parser.add_argument('--batch-size', default=32, type=int)
@@ -292,22 +294,25 @@ def main():
     parser.add_argument('--train', action='store_true')
     parser.add_argument('--test', action='store_true')
 
-    args = parser.parse_args()
+    args = parser.parse_args()  # get args
 
-    args.local_rank = int(os.getenv('LOCAL_RANK', 0))
-    args.world_size = int(os.getenv('WORLD_SIZE', 1))
+    # the environment variable LOCAL_RANK tells the script which GPU the current process is using
+    args.local_rank = int(os.getenv('LOCAL_RANK', 0))  # if not set, default to 0, so not distributed training
+    # the environment variable WORLD_SIZE is the total number of processes (usually GPUs) involved in the training
+    args.world_size = int(os.getenv('WORLD_SIZE', 1))   # if not set, default to 1, so single-process training
 
-    if args.world_size > 1:
+    if args.world_size > 1: # if multi-GPU training
         torch.cuda.set_device(device=args.local_rank)
         torch.distributed.init_process_group(backend='nccl', init_method='env://')
 
-    if args.local_rank == 0:
+    if args.local_rank == 0:    # only the main process (often called rank 0) runs the following
         if not os.path.exists('weights'):
             os.makedirs('weights')
 
-    util.setup_seed()
-    util.setup_multi_processes()
+    util.setup_seed()   # set random seed for reproducibility
+    util.setup_multi_processes()    # set up multi-processes for distributed training
 
+    # read parameters from yaml file, put them in a dictionary
     with open(os.path.join('utils', 'args.yaml'), errors='ignore') as f:
         params = yaml.safe_load(f)
 

@@ -1,58 +1,95 @@
-
-import torch
 import os
 import argparse
 import yaml
-
-from torch.utils import data
+import torch
 
 from utils import util
-from utils.dataset import Dataset
 
-def inference(args, params):
-    print("Hello World! This is a test inference script.")
-    
-    # set device to CPU
-    device = torch.device('cpu')
-    # load the model
-    model = torch.load('./weights/best.pt', map_location='cpu')['model'].float()
-    
-    # data handling
-    filenames = []
-    
-    # add to filenames list all the files names in the directory data/images
-    for i in range(1, 10):
-        filenames.append(f"data/images/{i}.jpg")
-        
-    dataset = Dataset(filenames, args.input_size, params, False)
-    loader = data.DataLoader(dataset, 8, False, num_workers=8,
-                             pin_memory=True, collate_fn=Dataset.collate_fn)
 
-    # load the model to the device
-    model.to(device).eval()
-    model.half()  # to FP16
-    
-    # inference
-    for i, (img, img_path) in enumerate(loader):
-        img = img.to(device).half()  # to FP16
-        pred = model(img)[0]
-        
-        # print the shape of the prediction
-        print(f"Prediction shape: {pred.shape}")
-        
-        # print the image path
-        print(f"Image path: {img_path[0]}")
-        
-        # print the prediction  
-        print(f"Prediction: {pred[j][0]} {pred[j][1]} {pred[j][2]} {pred[j][3]} {pred[j][4]} {pred[j][5]}")
-        
-    print("OK")
+import torch
+from pathlib import Path
+import cv2
+import numpy as np
+
+import torch
+from pathlib import Path
+import cv2
+import numpy as np
+
+# Optional: class names (adjust based on your dataset)
+CLASS_NAMES = [
+    'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
+    'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign',
+    'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
+    'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella',
+    'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard',
+    'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard',
+    'surfboard', 'tennis racket', 'bottle', 'wine glass', 'cup', 'fork',
+    'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange',
+    'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair',
+    'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv',
+    'laptop', 'mouse', 'remote', 'keyboard', 'cell phone', 'microwave',
+    'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase',
+    'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+]
+
+def inference():
+    # Load the model
+    checkpoint = torch.load('./weights/best.pt', map_location='cpu')
+    model = checkpoint['model'].float()
+    model.eval()
+    model.half()
+
+    # Load and preprocess the image
+    img_path = 'data/images/2.jpg'
+    img0 = cv2.imread(img_path)  # BGR
+    img = cv2.cvtColor(img0, cv2.COLOR_BGR2RGB)
+    img_resized = cv2.resize(img, (640, 640))
+    img_tensor = img_resized.transpose((2, 0, 1))  # HWC to CHW
+    img_tensor = np.ascontiguousarray(img_tensor, dtype=np.float16) / 255.0
+    img_tensor = torch.from_numpy(img_tensor).unsqueeze(0)  # [1, 3, H, W]
+
+    # Inference
+    with torch.no_grad():
+        preds = model(img_tensor)[0]  # assuming model returns (predictions, ...) tuple
+
+    # NMS (optional: only if your model doesn’t do this internally)
+    preds = preds[preds[:, 4] > 0.25]  # confidence threshold
+    if preds.shape[0] == 0:
+        print("No detections.")
+        return
+
+    # Scale boxes to original image size
+    h0, w0 = img0.shape[:2]
+    scale_x, scale_y = w0 / 640, h0 / 640
+    boxes = preds.clone()
+    boxes[:, [0, 2]] *= scale_x
+    boxes[:, [1, 3]] *= scale_y
+
+    # Draw boxes and labels
+    for *xyxy, conf, cls in boxes:
+        label = f'{CLASS_NAMES[int(cls)]} {conf:.2f}' if int(cls) < len(CLASS_NAMES) else f'{conf:.2f}'
+        xyxy = [int(x) for x in xyxy]
+        cv2.rectangle(img0, (xyxy[0], xyxy[1]), (xyxy[2], xyxy[3]), (0, 255, 0), 2)
+        cv2.putText(img0, label, (xyxy[0], xyxy[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+    # Save and show image
+    output_path = 'runs/detect/exp'
+    Path(output_path).mkdir(parents=True, exist_ok=True)
+    save_path = f'{output_path}/result.jpg'
+    cv2.imwrite(save_path, img0)
+    print(f"Saved results to {save_path}")
+
+    cv2.imshow('Detection', img0)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
 
     
 
-if __name__ == "__main__":
-    print(torch.__version__)
+def main():
     
+    # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-size', default=640, type=int)
     parser.add_argument('--batch-size', default=32, type=int)
@@ -61,28 +98,32 @@ if __name__ == "__main__":
     parser.add_argument('--train', action='store_true')
     parser.add_argument('--test', action='store_true')
 
-    args = parser.parse_args()
+    args = parser.parse_args()  # get args
 
-    args.local_rank = int(os.getenv('LOCAL_RANK', 0))
-    args.world_size = int(os.getenv('WORLD_SIZE', 1))
+    # the environment variable LOCAL_RANK tells the script which GPU the current process is using
+    args.local_rank = int(os.getenv('LOCAL_RANK', 0))  # if not set, default to 0, so not distributed training
+    # the environment variable WORLD_SIZE is the total number of processes (usually GPUs) involved in the training
+    args.world_size = int(os.getenv('WORLD_SIZE', 1))   # if not set, default to 1, so single-process training
 
-    if args.world_size > 1:
+    if args.world_size > 1: # if multi-GPU training
         torch.cuda.set_device(device=args.local_rank)
         torch.distributed.init_process_group(backend='nccl', init_method='env://')
 
-    if args.local_rank == 0:
+    if args.local_rank == 0:    # only the main process (often called rank 0) runs the following
         if not os.path.exists('weights'):
             os.makedirs('weights')
 
-    util.setup_seed()
-    util.setup_multi_processes()
+    util.setup_seed()   # set random seed for reproducibility
+    util.setup_multi_processes()    # set up multi-processes for distributed training
 
+    # read parameters from yaml file, put them in a dictionary
     with open(os.path.join('utils', 'args.yaml'), errors='ignore') as f:
         params = yaml.safe_load(f)
 
-    # if args.train:
-    #     train(args, params)
-    # if args.test:
-    #     test(args, params)
-    
-    inference(args, params)
+    #if args.train:
+    #    train(args, params)
+    inference()
+        
+
+if __name__ == "__main__":
+    main()
