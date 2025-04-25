@@ -14,13 +14,15 @@ def inference(args, params):
     
     filenames = []
     
-    for i in range(0, 10):
+    for i in range(0, 11):
         filenames.append('data/images/' + str(i) + '.jpg')
 
     dataset = Dataset(filenames, args.input_size, params, False)
     loader = data.DataLoader(dataset, 5, False, collate_fn=Dataset.collate_fn)  
     
-    model = torch.load('./weights/best.pt', map_location='cpu')['model'].float() 
+    # model = torch.load('./weights/best.pt', map_location='cpu')['model'].float() 
+    checkpoint = torch.load('./weights/best.pt', map_location='cpu', weights_only=False)
+    model = checkpoint['model'].float()
     
     # model.half()  # needed if GPU is used
     model.eval()   
@@ -83,14 +85,6 @@ def inference(args, params):
                         cv2.rectangle(original_img, (x1, y1), (x2, y2), color, 2)
                         cv2.putText(original_img, label, (x1, y1 - 10), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                        
-                                               
-                        # Draw boxes on image
-                        # x1, y1, x2, y2 = map(int, xyxy)
-                        # label = f"{int(cls)} {conf:.2f}"
-                        # cv2.rectangle(original_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        # cv2.putText(original_img, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
-                        #             0.5, (0, 255, 0), 1, cv2.LINE_AA)
 
             # Save annotated image
             img_save_path = os.path.join(img_dir, f"{filename}.jpg")
@@ -106,38 +100,20 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-size', default=640, type=int)
     parser.add_argument('--batch-size', default=32, type=int)
-    parser.add_argument('--local_rank', default=0, type=int)
-    parser.add_argument('--epochs', default=500, type=int)
-    parser.add_argument('--train', action='store_true')
-    parser.add_argument('--test', action='store_true')
+    # parser.add_argument('--local_rank', default=0, type=int)
+    # parser.add_argument('--epochs', default=500, type=int)
+    # parser.add_argument('--train', action='store_true')
+    # parser.add_argument('--test', action='store_true')
 
     args = parser.parse_args()  # get args
 
     # CTRL k + C to comment out the following lines
     # CTRL k + U to uncomment the following lines
 
-    # # the environment variable LOCAL_RANK tells the script which GPU the current process is using
-    # args.local_rank = int(os.getenv('LOCAL_RANK', 0))  # if not set, default to 0, so not distributed training
-    # # the environment variable WORLD_SIZE is the total number of processes (usually GPUs) involved in the training
-    # args.world_size = int(os.getenv('WORLD_SIZE', 1))   # if not set, default to 1, so single-process training
-
-    # if args.world_size > 1: # if multi-GPU training
-    #     torch.cuda.set_device(device=args.local_rank)
-    #     torch.distributed.init_process_group(backend='nccl', init_method='env://')
-
-    # if args.local_rank == 0:    # only the main process (often called rank 0) runs the following
-    #     if not os.path.exists('weights'):
-    #         os.makedirs('weights')
-
-    # util.setup_seed()   # set random seed for reproducibility
-    # util.setup_multi_processes()    # set up multi-processes for distributed training
-
     # read parameters from yaml file, put them in a dictionary
     with open(os.path.join('utils', 'args.yaml'), errors='ignore') as f:
         params = yaml.safe_load(f)
 
-    #if args.train:
-    #    train(args, params)
     inference(args, params)
         
 
