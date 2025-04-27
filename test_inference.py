@@ -78,6 +78,28 @@ def inference(args, params):
                         xyxy[2] = int(xyxy[2] * w_orig / args.input_size)
                         xyxy[3] = int(xyxy[3] * h_orig / args.input_size)
                         
+                        # put a red point in the center of the image
+                        center_x = int((xyxy[0] + xyxy[2]) / 2)
+                        center_y = int((xyxy[1] + xyxy[3]) / 2)
+                        cv2.circle(original_img, (center_x, center_y), 5, (0, 0, 255), -1)
+                        
+                        # put a blue point in the center of the entire image
+                        center_x = int(w_orig / 2)
+                        center_y = int(h_orig / 2)
+                        cv2.circle(original_img, (center_x, center_y), 5, (255, 0, 0), -1)
+                        
+                        # put a green point on each corner of the image
+                        cv2.circle(original_img, (xyxy[0], xyxy[1]), 5, (0, 255, 0), -1)
+                        cv2.circle(original_img, (xyxy[2], xyxy[3]), 5, (0, 255, 0), -1)
+                        cv2.circle(original_img, (xyxy[0], xyxy[3]), 5, (0, 255, 0), -1)
+                        cv2.circle(original_img, (xyxy[2], xyxy[1]), 5, (0, 255, 0), -1)                        
+                        
+                        # put a blue point on each corner of the entire image
+                        cv2.circle(original_img, (0, 0), 5, (255, 0, 0), -1)
+                        cv2.circle(original_img, (w_orig, h_orig), 5, (255, 0, 0), -1)
+                        cv2.circle(original_img, (0, h_orig), 5, (255, 0, 0), -1)
+                        cv2.circle(original_img, (w_orig, 0), 5, (255, 0, 0), -1)
+                        
                         # Draw boxes on image
                         x1, y1, x2, y2 = [int(x) for x in xyxy]
                         label = f"{int(cls)}: {conf:.2f}"
