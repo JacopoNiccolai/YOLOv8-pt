@@ -1,4 +1,4 @@
-from coco2yolo.general_json2yolo import convert_coco_json
+from coco2yolo.coco2yolo import convert_coco_json
 
 input_path = "data/coco2017/annotations"
 output_path = "data/coco2017/converted"
