@@ -12,10 +12,22 @@ from utils.dataset import Dataset
 
 def inference(args, params):
     
-    filenames = []
+    image_names = []
+    n = 5  # number of images to test
     
-    for i in range(0, 11):
-        filenames.append('data/images/' + str(i) + '.jpg')
+
+    image_folder = 'data/coco2017/val2017/'
+    all_files = os.listdir(image_folder)
+    image_extensions = ('.jpg', '.jpeg', '.png', '.bmp')
+    image_files = [f for f in all_files if f.lower().endswith(image_extensions)]
+    image_files.sort()
+    image_names = image_files[:n]
+
+    filenames = []
+    for i in range(n):
+        filenames.append(image_folder + image_names[i])
+        
+    print('filenames:', filenames)
 
     dataset = Dataset(filenames, args.input_size, params, False)
     loader = data.DataLoader(dataset, 5, False, collate_fn=Dataset.collate_fn)  
@@ -122,18 +134,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input-size', default=640, type=int)
     parser.add_argument('--batch-size', default=32, type=int)
-    # parser.add_argument('--local_rank', default=0, type=int)
-    # parser.add_argument('--epochs', default=500, type=int)
-    # parser.add_argument('--train', action='store_true')
-    # parser.add_argument('--test', action='store_true')
 
     args = parser.parse_args()  # get args
 
-    # CTRL k + C to comment out the following lines
-    # CTRL k + U to uncomment the following lines
-
     # read parameters from yaml file, put them in a dictionary
-    with open(os.path.join('utils', 'args.yaml'), errors='ignore') as f:
+    with open(os.path.join('config', 'args.yaml'), errors='ignore') as f:
         params = yaml.safe_load(f)
 
     inference(args, params)

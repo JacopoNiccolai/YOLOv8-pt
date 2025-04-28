@@ -313,7 +313,7 @@ def main():
     util.setup_multi_processes()    # set up multi-processes for distributed training
 
     # read parameters from yaml file, put them in a dictionary
-    with open(os.path.join('utils', 'args.yaml'), errors='ignore') as f:
+    with open(os.path.join('config', 'args.yaml'), errors='ignore') as f:
         params = yaml.safe_load(f)
 
     if args.train:
