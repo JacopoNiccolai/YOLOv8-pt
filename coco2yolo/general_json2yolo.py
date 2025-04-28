@@ -1,24 +1,21 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
-import contextlib
 import json
 from collections import defaultdict
-
-import cv2
-import pandas as pd
-from PIL import Image
+import numpy as np
+from tqdm import tqdm
 
 from coco2yolo.utils import *
 
 
 def convert_coco_json(json_dir="../coco/annotations/", labels_dir="new_dir/", cls91to80=False):
-    """Converts COCO JSON format to YOLO label format, with options for segments and class mapping."""
-    save_dir = make_dirs(labels_dir)  # output directory
+    """Converts COCO JSON format to YOLO label format, with options for class mapping."""
+    save_dir = make_dir(labels_dir)  # output directory
     coco80 = coco91_to_coco80_class()
 
     # Import json
     for json_file in sorted(Path(json_dir).resolve().glob("*.json")):
-        fn = Path(save_dir) / "labels" / json_file.stem.replace("instances_", "")  # folder name
+        fn = Path(save_dir) / json_file.stem #.replace("instances_", "")  # folder name
         fn.mkdir()
         with open(json_file) as f:
             data = json.load(f)
@@ -58,28 +55,3 @@ def convert_coco_json(json_dir="../coco/annotations/", labels_dir="new_dir/", cl
                 for i in range(len(bboxes)):
                     line = (*(bboxes[i]),)  # cls, box
                     file.write(("%g " * len(line)).rstrip() % line + "\n")
-
-
-def min_index(arr1, arr2):
-    """
-    Find a pair of indexes with the shortest distance.
-
-    Args:
-        arr1: (N, 2).
-        arr2: (M, 2).
-
-    Return:
-        a pair of indexes(tuple).
-    """
-    dis = ((arr1[:, None, :] - arr2[None, :, :]) ** 2).sum(-1)
-    return np.unravel_index(np.argmin(dis, axis=None), dis.shape)
-
-
-def delete_dsstore(path="../datasets"):
-    """Deletes Apple .DS_Store files recursively from a specified directory."""
-    from pathlib import Path
-
-    files = list(Path(path).rglob(".DS_store"))
-    print(files)
-    for f in files:
-        f.unlink()
