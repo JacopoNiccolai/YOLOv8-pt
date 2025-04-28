@@ -4,6 +4,7 @@ import torch
 
 from utils.util import make_anchors
 
+### OK
 # function to calculate appropriate padding
 def pad(k, p=None, d=1):
     if d > 1:   # if dilatation involved
@@ -12,7 +13,7 @@ def pad(k, p=None, d=1):
         p = k // 2  # half-padding
     return p
 
-
+### OK
 def fuse_conv(conv, norm):
     fused_conv = torch.nn.Conv2d(conv.in_channels,
                                  conv.out_channels,
@@ -32,6 +33,7 @@ def fuse_conv(conv, norm):
 
     return fused_conv
 
+### OK
 # Convolutional block
 class Conv(torch.nn.Module):
     
@@ -52,6 +54,7 @@ class Conv(torch.nn.Module):
         return self.relu(self.conv(x))  # BatchNorm step is skipped
 
 
+### OK
 # Bottleneck block
 class Residual(torch.nn.Module):
     # parameters: input channels, add indicates if the residual block adds a skip connection
@@ -67,6 +70,7 @@ class Residual(torch.nn.Module):
         return self.res_m(x) + x if self.add_m else self.res_m(x)
 
 
+### OK
 # C2f block (actually named C2f cause Cross Stage Partial is in v4, v5)
 class CSP(torch.nn.Module):
     # parameters: input channels, output channels, number of residual blocks,
@@ -107,7 +111,7 @@ class SPP(torch.nn.Module):
         # the third polling step: y3 = self.res_m(y2) is done here below       
         return self.conv2(torch.cat([x, y1, y2, self.res_m(y2)], 1))    # concatenate the outputs of the pooling steps and the original input, and pass through conv2
 
-
+### OK
 # Backbone network (DarkNet backbone)
 class DarkNet(torch.nn.Module):
     def __init__(self, width, depth):
@@ -138,6 +142,7 @@ class DarkNet(torch.nn.Module):
         return p3, p4, p5
 
 
+### OK
 # Feature Pyramid Network (FPN) block - Neck
 class DarkFPN(torch.nn.Module):
     def __init__(self, width, depth):
@@ -159,6 +164,7 @@ class DarkFPN(torch.nn.Module):
         return h2, h4, h6
 
 
+### OK
 # Distribution Focal Loss (DFL) module
 class DFL(torch.nn.Module):
     # Integral module of Distribution Focal Loss (DFL)
@@ -176,6 +182,7 @@ class DFL(torch.nn.Module):
         return self.conv(x.softmax(1)).view(b, 4, a)
 
 
+### OK
 # Detect block (multi-scale detection head)
 # outputs x, y, w, h, class_scores
 class Head(torch.nn.Module):

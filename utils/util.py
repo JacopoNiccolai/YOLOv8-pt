@@ -64,7 +64,7 @@ def scale(coords, shape1, shape2, ratio_pad=None):
     coords[:, 3].clamp_(0, shape2[0])  # y2
     return coords
 
-
+### OK
 def make_anchors(x, strides, offset=0.5):
     """
     Generate anchors from features
@@ -108,7 +108,7 @@ def box_iou(box1, box2):
 
     return intersection / (area1[:, None] + area2 - intersection)
 
-
+### OK
 def wh2xy(x):
     y = x.clone()
     y[..., 0] = x[..., 0] - x[..., 2] / 2  # top left x
@@ -118,6 +118,7 @@ def wh2xy(x):
     return y
 
 
+### OK
 def non_max_suppression(prediction, conf_threshold=0.25, iou_threshold=0.45):
     nc = prediction.shape[1] - 4  # number of classes
     xc = prediction[:, 4:4 + nc].amax(1) > conf_threshold  # candidates
