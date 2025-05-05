@@ -8,6 +8,7 @@ import cv2
 from utils import util
 from torch.utils import data
 from utils.dataset import Dataset
+from nets.nn import yolo_v8_n
 
 
 def annotate_image_and_save_predictions(image_path, filename, pred, img_dir, txt_dir, args):
@@ -68,7 +69,7 @@ def annotate_image_and_save_predictions(image_path, filename, pred, img_dir, txt
 
 
 
-def inference(args, params, images_folder, num_imges=5, infer_correct_annotations=True):
+def inference(args, params, images_folder, num_imges=5):
     
     image_names = []    
 
@@ -83,11 +84,17 @@ def inference(args, params, images_folder, num_imges=5, infer_correct_annotation
         filenames.append(images_folder + image_names[i])
 
     dataset = Dataset(filenames, args.input_size, params, False)
-    loader = data.DataLoader(dataset, 5, False, collate_fn=Dataset.collate_fn)  
+    loader = data.DataLoader(dataset, 5, False, collate_fn=Dataset.collate_fn)  # batch size = 5
     
-    # model = torch.load('./weights/best.pt', map_location='cpu')['model'].float() 
-    checkpoint = torch.load('./weights/best.pt', map_location='cpu', weights_only=False)
-    model = checkpoint['model'].float()
+    # # model = torch.load('./weights/best.pt', map_location='cpu')['model'].float() 
+    # checkpoint = torch.load('./weights/best.pt', map_location='cpu', weights_only=False)
+    # model = checkpoint['model'].float()
+    
+    num_classes = len(params['names'])
+    model = yolo_v8_n(num_classes)
+    checkpoint = torch.load('./weights/best.pt', map_location='cpu')
+    model.load_state_dict(checkpoint['model'].state_dict())
+    model = model.float()
     
     # model.half()  # needed if GPU is used
     model.eval()   
@@ -125,6 +132,7 @@ def inference(args, params, images_folder, num_imges=5, infer_correct_annotation
             
             annotate_image_and_save_predictions(image_path, filename, pred, img_dir, txt_dir, args)
     
+    print(len(filenames), 'images found in', images_folder)
     print('len(loader):', len(loader))
     print('len(dataset):', len(dataset))
     
